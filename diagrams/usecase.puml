@@ -1,0 +1,64 @@
+@startuml NodeShopUseCase
+left to right direction
+skinparam packageStyle rectangle
+
+actor Customer
+actor Guest
+actor Admin
+actor "Payment Gateway" as Payment
+actor "Authentication System" as AuthSystem
+
+Customer --> (Browse Products)
+Customer --> (View Product Details)
+Customer --> (Add Product to Cart)
+Customer --> (Remove Product from Cart)
+Customer --> (View Cart)
+Customer --> (Checkout)
+Customer --> (View Orders)
+Customer --> (Login / Signup)
+
+Guest --> (Browse Products)
+Guest --> (View Product Details)
+Guest --> (Login / Signup)
+
+Admin --> (Login / Signup)
+Admin --> (Manage Products)
+Admin --> (View Orders)
+
+(Checkout) .> (Process Payment) : <<include>>
+(Checkout) .> (Create Order) : <<include>>
+(Create Order) --> (View Orders)
+
+(Login / Signup) .> (Authenticate User) : <<include>>
+
+note right of (Browse Products)
+  Mapped pages/components:
+  - src/pages/Shop -> Browse Products
+  - src/components/ProductList/ProductList.js
+end note
+
+note right of (View Product Details)
+  - src/pages/Product-Detail/ProductDetail.js
+  - ProductDetail shows Add to Cart
+end note
+
+note right of (Add Product to Cart)
+  - src/components/Cart/* and src/store/actions/cart.js
+end note
+
+note right of (Checkout)
+  - src/pages/Checkout/Checkout.js (Stripe integration)
+  - creates order via POST /create-order
+end note
+
+note right of (Manage Products)
+  - src/pages/ProductEditor/* and src/pages/Admin-Shop/*
+  - Admin can add/edit/delete products
+end note
+
+note bottom
+  This diagram is a high-level use-case view inferred from the
+  repository pages, components and Redux actions.
+end note
+
+@enduml

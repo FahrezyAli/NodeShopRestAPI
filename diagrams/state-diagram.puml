@@ -1,0 +1,194 @@
+@startuml NodeShopRestAPI State Diagram
+
+title NodeShopRestAPI - State Transition Diagram
+
+[*] --> Unauthenticated : App Init
+
+state "Authentication Module" as AuthModule {
+    state Unauthenticated {
+        Unauthenticated : token = null
+        Unauthenticated : userId = null
+        Unauthenticated : email = null
+        Unauthenticated : loading = false
+        Unauthenticated : error = null
+    }
+    
+    state AuthLoading {
+        AuthLoading : loading = true
+        AuthLoading : error = null
+    }
+    
+    state Authenticated {
+        Authenticated : token != null
+        Authenticated : userId != null
+        Authenticated : email != null
+        Authenticated : loading = false
+    }
+    
+    state AuthError {
+        AuthError : error != null
+        AuthError : loading = false
+    }
+    
+    Unauthenticated --> AuthLoading : AUTH_START\n(login/signup)
+    AuthLoading --> Authenticated : AUTH_SUCCESS
+    AuthLoading --> AuthError : AUTH_FAIL
+    AuthError --> AuthLoading : Retry Auth
+    Authenticated --> Unauthenticated : AUTH_LOGOUT\n(manual/timeout)
+    
+    note right of Authenticated
+        Token stored in localStorage
+        Auto-logout after expiry (3600s)
+        Routes change based on auth
+    end note
+}
+
+state "Shop Module" as ShopModule {
+    state ShopIdle {
+        ShopIdle : products = []
+        ShopIdle : loading = false
+        ShopIdle : pageNumber = 1
+    }
+    
+    state ShopLoading {
+        ShopLoading : loading = true
+    }
+    
+    state ShopLoaded {
+        ShopLoaded : products = [...]
+        ShopLoaded : loading = false
+        ShopLoaded : pageNumber updated
+    }
+    
+    state ShopError {
+        ShopError : error != null
+        ShopError : loading = false
+    }
+    
+    [*] --> ShopIdle
+    ShopIdle --> ShopLoading : FETCH_PRODUCTS_START
+    ShopLoading --> ShopLoaded : FETCH_PRODUCTS_SUCCESS
+    ShopLoading --> ShopError : FETCH_PRODUCTS_FAIL
+    ShopLoaded --> ShopLoading : Pagination\n(next/previous)
+    ShopError --> ShopLoading : Retry Fetch
+}
+
+state "Cart Module" as CartModule {
+    state CartEmpty {
+        CartEmpty : products = []
+        CartEmpty : totalPrice = 0
+        CartEmpty : loading = false
+    }
+    
+    state CartLoading {
+        CartLoading : loading = true
+    }
+    
+    state CartWithItems {
+        CartWithItems : products = [...]
+        CartWithItems : totalPrice > 0
+        CartWithItems : loading = false
+    }
+    
+    state CartError {
+        CartError : error != null
+        CartError : loading = false
+    }
+    
+    [*] --> CartEmpty
+    CartEmpty --> CartLoading : FETCH_CART_START
+    CartLoading --> CartEmpty : FETCH_CART_SUCCESS\n(no items)
+    CartLoading --> CartWithItems : FETCH_CART_SUCCESS\n(with items)
+    CartLoading --> CartError : FETCH_CART_FAIL
+    
+    CartWithItems --> CartLoading : ADD_PRODUCT_TO_CART_START
+    CartEmpty --> CartLoading : ADD_PRODUCT_TO_CART_START
+    CartLoading --> CartWithItems : ADD_PRODUCT_TO_CART_SUCCESS
+    CartLoading --> CartError : ADD_PRODUCT_TO_CART_FAIL
+    
+    CartWithItems --> CartLoading : REMOVE_PRODUCT_FROM_CART_START
+    CartLoading --> CartWithItems : REMOVE_PRODUCT_FROM_CART_SUCCESS\n(items remain)
+    CartLoading --> CartEmpty : REMOVE_PRODUCT_FROM_CART_SUCCESS\n(last item removed)
+    CartLoading --> CartError : REMOVE_PRODUCT_FROM_CART_FAIL
+    
+    CartError --> CartLoading : Retry Operation
+    
+    note right of CartWithItems
+        Requires authentication
+        Total price calculated server-side
+    end note
+}
+
+state "Orders Module" as OrdersModule {
+    state OrdersEmpty {
+        OrdersEmpty : orders = []
+        OrdersEmpty : loading = false
+    }
+    
+    state OrdersLoading {
+        OrdersLoading : loading = true
+    }
+    
+    state OrdersLoaded {
+        OrdersLoaded : orders = [...]
+        OrdersLoaded : loading = false
+    }
+    
+    state OrdersError {
+        OrdersError : error != null
+        OrdersError : loading = false
+    }
+    
+    [*] --> OrdersEmpty
+    OrdersEmpty --> OrdersLoading : FETCH_ORDERS_START
+    OrdersLoading --> OrdersEmpty : FETCH_ORDERS_SUCCESS\n(no orders)
+    OrdersLoading --> OrdersLoaded : FETCH_ORDERS_SUCCESS\n(with orders)
+    OrdersLoading --> OrdersError : FETCH_ORDERS_FAIL
+    OrdersError --> OrdersLoading : Retry Fetch
+    
+    note right of OrdersLoaded
+        Requires authentication
+        Read-only view
+    end note
+}
+
+state "Application Routes" as Routes {
+    state PublicRoutes {
+        PublicRoutes : /auth
+        PublicRoutes : /shop
+        PublicRoutes : /shop/:productId
+        PublicRoutes : / (landing)
+    }
+    
+    state ProtectedRoutes {
+        ProtectedRoutes : /cart
+        ProtectedRoutes : /checkout
+        ProtectedRoutes : /orders
+        ProtectedRoutes : /admin-shop
+        ProtectedRoutes : /product-editor
+        ProtectedRoutes : /logout
+    }
+    
+    PublicRoutes --> ProtectedRoutes : Authentication Success
+    ProtectedRoutes --> PublicRoutes : Logout / Token Expiry
+}
+
+note bottom of AuthModule
+    Authentication Flow:
+    1. User enters credentials
+    2. AUTH_START dispatched
+    3. API call to /login or /signup
+    4. On success: store token in localStorage
+    5. AUTH_SUCCESS with token, userId, email
+    6. Set auto-logout timeout (3600s)
+end note
+
+note bottom of CartModule
+    Cart Flow:
+    1. Requires valid token & userId
+    2. All operations include auth headers
+    3. Server manages cart state
+    4. Client syncs with server
+end note
+
+@enduml
